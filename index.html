@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pike Food Center Pickup</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <div class="top">
+      <div class="logo"><img src="logo.webp" alt="Pike Food Center"></div>
+      <div class="mode" id="nav">
+        <button data-act="nav" data-view="shop" class="on">Shop</button>
+        <button data-act="nav" data-view="orders">My orders</button>
+        <button data-act="nav" data-view="staff" id="navStaff" style="display:none">Staff</button>
+      </div>
+    </div>
+    <h1 id="hdrTitle">Order now. Pick up in minutes.</h1>
+    <p class="sub" id="hdrSub">Free in-store pickup, no waiting in line.</p>
+  </div>
+  <div class="sbar" id="sbar"><label class="sw"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="search" type="search" placeholder="Search snacks and more"></label></div>
+  <main>
+    <div class="view active" id="v-shop"><div class="chips cats" id="cats"></div><div class="chips sub" id="brands"></div><div class="grid" id="grid"></div></div>
+    <div class="view" id="v-checkout"></div>
+    <div class="view" id="v-track"></div>
+    <div class="view" id="v-orders"></div>
+    <div class="view" id="v-login"></div>
+    <div class="view" id="v-staff"></div>
+  </main>
+  <footer><button class="linkbtn" id="staffLink" data-act="staff-link">Staff sign in</button></footer>
+</div>
+<div class="cartbar hidden" id="cartbar" data-act="cart"><span id="cbCount"></span><b id="cbTotal"></b></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
