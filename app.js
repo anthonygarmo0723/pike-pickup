@@ -19,7 +19,8 @@
 
   const P = (id) => products.find((p) => p.id === id);
   const total = () => Object.entries(cart).reduce((s, [id, q]) => s + (P(id) ? P(id).price_cents * q : 0), 0);
-  const cartCount = () => Object.values(cart).reduce((a, b) => a + b, 0);
+  const cartCount = () => Object.entries(cart).reduce((s, [id, q]) => s + (P(id) && P(id).unit === 'lb' ? 1 : q), 0);
+const fmtQty = (p, q) => p.unit === 'lb' ? (Math.round(q * 100) / 100) + ' lb' : q + '×';
   const fmtDate = (d) => new Date(d).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
   function normPhone(v) {
@@ -65,7 +66,7 @@
 
   /* ---------- navigation ---------- */
   function showView(v) {
-    if (v === 'staff' && !isStaff) v = 'login';
+    if ((v === 'staff' || v === 'prices') && !isStaff) v = 'login';
     view = v;
     document.querySelectorAll('.view').forEach((x) => x.classList.remove('active'));
     $('v-' + v).classList.add('active');
@@ -78,6 +79,7 @@
       orders: ['My orders', 'Orders placed from this phone.'],
       login: ['Staff sign in', 'For Pike Food Center team members.'],
       staff: ['Pickup orders', 'Check off items as you pick. Customers see it live.'],
+      prices: ['Edit prices', 'Changes show up for customers right away.'],
     };
     $('hdrTitle').textContent = T[v][0]; $('hdrSub').textContent = T[v][1];
     if (v === 'shop') renderShop();
@@ -86,12 +88,14 @@
     if (v === 'orders') refreshMine();
     if (v === 'login') renderLogin();
     if (v === 'staff') loadAllOrders();
+    if (v === 'prices') loadPriceEditor();
     if (v !== 'track' && v !== 'orders') document.title = 'Pike Food Center Pickup';
     updateBar();
     window.scrollTo(0, 0);
   }
   function updateChrome() {
     $('navStaff').style.display = isStaff ? '' : 'none';
+    $('navPrices').style.display = isStaff ? '' : 'none';
     $('staffLink').textContent = isStaff ? 'Staff sign out' : 'Staff sign in';
   }
   function updateBar() {
@@ -103,21 +107,28 @@
 
   /* ---------- shop ---------- */
   function change(id, d) {
-    cart[id] = Math.max(0, (cart[id] || 0) + d);
+    const p = P(id);
+    const step = (p && p.unit === 'lb') ? 0.5 * d : d;
+    let v = Math.round(((cart[id] || 0) + step) * 100) / 100;
+    if (v < 0) v = 0;
+    cart[id] = v;
     if (!cart[id]) delete cart[id];
     if (view === 'checkout') { if (!cartCount()) showView('shop'); else renderCheckout(); } else renderShop();
     updateBar();
   }
   function ctl(id) {
     const q = cart[id] || 0;
+    const p = P(id);
+    const label = q ? (p.unit === 'lb' ? q + ' lb' : q) : '';
     return q
-      ? `<div class="stepper"><button data-act="dec" data-id="${id}">−</button><span>${q}</span><button data-act="inc" data-id="${id}">+</button></div>`
+      ? `<div class="stepper"><button data-act="dec" data-id="${id}">−</button><span>${label}</span><button data-act="inc" data-id="${id}">+</button></div>`
       : `<button class="plus" aria-label="Add" data-act="inc" data-id="${id}">+</button>`;
   }
   function card(p) {
+    const priceText = p.unit === 'lb' ? money(p.price_cents) + '/lb' : money(p.price_cents);
     return `<div class="card"><div class="pic">${p.image ? `<img src="products/${esc(p.image)}" alt="">` : 'Photo coming soon'}</div>
       <div class="meta"><div class="name">${esc(p.name)}</div><div class="size">${esc(p.size)}</div>
-      <div class="buy"><span class="price">${money(p.price_cents)}</span>${ctl(p.id)}</div></div></div>`;
+      <div class="buy"><span class="price">${priceText}</span>${ctl(p.id)}</div>${p.unit === 'lb' ? '<div class="wtnote">Priced by weight — final total confirmed at pickup</div>' : ''}</div></div>`;
   }
   function renderShop() {
     const cats = [...new Set(products.map((p) => p.category))];
@@ -139,14 +150,16 @@
   /* ---------- checkout ---------- */
   function renderCheckout() {
     if (!cartCount()) { $('v-checkout').innerHTML = '<p class="empty">Your cart is empty.</p><button class="ghost" data-act="back">Continue shopping</button>'; return; }
+    const hasWeight = Object.keys(cart).some((id) => P(id) && P(id).unit === 'lb');
     const lines = Object.entries(cart).map(([id, q]) => {
       const p = P(id); if (!p) return '';
+      const unitText = p.unit === 'lb' ? money(p.price_cents) + '/lb' : money(p.price_cents) + ' each';
       return `<div class="line"><div class="pic">${p.image ? `<img src="products/${esc(p.image)}" alt="">` : ''}</div>
-        <div class="info">${esc(p.name)}<small>${esc(p.size)}${p.size ? ' · ' : ''}${money(p.price_cents)} each</small></div>
-        <div class="stepper"><button data-act="dec" data-id="${id}">−</button><span>${q}</span><button data-act="inc" data-id="${id}">+</button></div></div>`;
+        <div class="info">${esc(p.name)}<small>${esc(p.size)}${p.size ? ' · ' : ''}${unitText}${p.unit === 'lb' ? ' · ~' + money(p.price_cents * q) : ''}</small></div>
+        <div class="stepper"><button data-act="dec" data-id="${id}">−</button><span>${fmtQty(p, q)}</span><button data-act="inc" data-id="${id}">+</button></div></div>`;
     }).join('');
     $('v-checkout').innerHTML = `<button class="back" data-act="back">← Continue shopping</button>
-      <div class="panel">${lines}<div class="total"><span>Total</span><span>${money(total())}</span></div><div class="note">Pay in store when you pick up.</div></div>
+      <div class="panel">${lines}<div class="total"><span>${hasWeight ? 'Estimated total' : 'Total'}</span><span>${money(total())}</span></div><div class="note">Pay in store when you pick up.${hasWeight ? ' Weighed items are estimated — your final total is confirmed when it\'s weighed at pickup.' : ''}</div></div>
       <div class="panel"><label for="pname">Name for pickup</label>
       <input class="txt" id="pname" type="text" maxlength="60" placeholder="e.g. Jordan">
       <label for="pphone" style="margin-top:14px">Mobile number (only used if we need to reach you)</label>
@@ -284,6 +297,46 @@
     if (!error) loadAllOrders();
   }
 
+  /* ---------- staff: edit prices ---------- */
+  let priceProducts = [], priceMsg = '', priceCat = null;
+  async function loadPriceEditor() {
+    if (!isStaff) return;
+    const { data, error } = await sb.from('products').select('*').order('category').order('sort');
+    if (error) { $('v-prices').innerHTML = '<p class="empty">Could not load products.</p>'; return; }
+    priceProducts = data;
+    if (!priceCat) priceCat = priceProducts[0] && priceProducts[0].category;
+    renderPriceEditor();
+  }
+  function renderPriceEditor() {
+    const cats = [...new Set(priceProducts.map((p) => p.category))];
+    const tabs = cats.map((c) => `<div class="chip cat ${c === priceCat ? 'on' : ''}" data-act="pricecat" data-cat="${esc(c)}">${esc(c)}</div>`).join('');
+    const rows = priceProducts.filter((p) => p.category === priceCat).map((p) => `
+      <div class="prow" data-row="${p.id}">
+        <div class="prowname">${esc(p.name)}<small>${esc(p.size)}${p.unit === 'lb' ? ' · sold by the lb' : ''}</small></div>
+        <div class="prowedit">
+          <span class="dollar">$</span><input class="pinput" type="number" step="0.01" min="0" inputmode="decimal" value="${(p.price_cents / 100).toFixed(2)}" data-id="${p.id}">
+          ${p.unit === 'lb' ? '<span class="perlb">/lb</span>' : ''}
+          <button class="savebtn" data-act="saveprice" data-id="${p.id}">Save</button>
+        </div>
+      </div>`).join('');
+    $('v-prices').innerHTML = `<div class="chips cats">${tabs}</div><div class="panel pricelist">${rows || '<p class="empty">No products in this category.</p>'}</div><div class="msg">${esc(priceMsg)}</div>`;
+  }
+  async function savePrice(id) {
+    const input = document.querySelector(`.pinput[data-id="${id}"]`);
+    const row = document.querySelector(`[data-row="${id}"]`);
+    const val = parseFloat(input.value);
+    if (isNaN(val) || val < 0) { priceMsg = 'Enter a valid price.'; renderPriceEditor(); return; }
+    const cents = Math.round(val * 100);
+    const btn = row.querySelector('.savebtn'); const oldText = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Saving…';
+    const { error } = await sb.from('products').update({ price_cents: cents }).eq('id', id);
+    if (error) { btn.disabled = false; btn.textContent = oldText; priceMsg = 'Could not save. Please try again.'; renderPriceEditor(); return; }
+    const p = priceProducts.find((x) => x.id === id); if (p) p.price_cents = cents;
+    const pp = products.find((x) => x.id === id); if (pp) pp.price_cents = cents;
+    btn.textContent = 'Saved ✓';
+    setTimeout(() => { if (btn.isConnected) { btn.disabled = false; btn.textContent = 'Save'; } }, 1200);
+  }
+
   /* ---------- events ---------- */
   document.addEventListener('click', (e) => {
     const t = e.target.closest('[data-act]'); if (!t) return;
@@ -303,6 +356,8 @@
       case 'staff-login': staffLogin(); break;
       case 'stab': sTab = d.tab; renderStaff(); break;
       case 'mark': markStatus(d.id, d.status); break;
+      case 'pricecat': priceCat = d.cat; renderPriceEditor(); break;
+      case 'saveprice': savePrice(d.id); break;
     }
   });
   document.addEventListener('change', (e) => {
